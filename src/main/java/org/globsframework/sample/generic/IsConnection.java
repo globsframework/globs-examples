@@ -23,15 +23,10 @@ public class IsConnection {
 
     static {
         GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("IsConnection");
-        TYPE = typeBuilder.unCompleteType();
-        typeBuilder.complete();
+        typeBuilder.register(GlobCreateFromAnnotation.class, IsConnection::create);
+        TYPE = typeBuilder.build();
         UNIQUE_KEY = KeyBuilder.newEmptyKey(TYPE);
         UNIQUE_INSTANCE = TYPE.instantiate();
-        typeBuilder.register(GlobCreateFromAnnotation.class, IsConnection::create);
-
-//        GlobTypeLoader loader = GlobTypeLoaderFactory.create(IsConnection.class);
-//        loader.register(GlobCreateFromAnnotation.class, IsConnection::create);
-//        loader.load();
     }
 
     private static Glob create(Annotation annotation) {

@@ -22,15 +22,10 @@ public class DbTarget {
 
     static {
         GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("DbTarget");
-        TYPE = typeBuilder.unCompleteType();
         dbResource = typeBuilder.declareStringField("dbResource");
-        typeBuilder.complete();
-        KEY = KeyBuilder.newEmptyKey(TYPE);
         typeBuilder.register(GlobCreateFromAnnotation.class, DbTarget::create);
-
-//        GlobTypeLoader loader = GlobTypeLoaderFactory.create(DbTarget.class);
-//        loader.register(GlobCreateFromAnnotation.class, DbTarget::create);
-//        loader.load();
+        TYPE = typeBuilder.build();
+        KEY = KeyBuilder.newEmptyKey(TYPE);
     }
 
     private static Glob create(Annotation annotation) {

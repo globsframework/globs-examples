@@ -1,25 +1,31 @@
 package org.globsframework.sample.rest;
 
-import org.apache.hc.core5.http.impl.bootstrap.AsyncServerBootstrap;
+import org.apache.hc.core5.http2.config.H2Config;
+import org.apache.hc.core5.http2.impl.nio.bootstrap.H2ServerBootstrap;
+import org.apache.hc.core5.reactor.IOReactorConfig;
 import org.globsframework.commandline.ParseCommandLine;
 import org.globsframework.core.metamodel.GlobType;
 import org.globsframework.core.metamodel.GlobTypeBuilder;
 import org.globsframework.core.metamodel.GlobTypeBuilderFactory;
-import org.globsframework.core.metamodel.annotations.AutoIncrement;
-import org.globsframework.core.metamodel.annotations.AutoIncrement_;
-import org.globsframework.core.metamodel.annotations.KeyField;
-import org.globsframework.core.metamodel.annotations.KeyField_;
+import org.globsframework.core.metamodel.annotations.*;
 import org.globsframework.core.metamodel.fields.IntegerField;
 import org.globsframework.core.metamodel.fields.StringField;
 import org.globsframework.core.model.Glob;
 import org.globsframework.core.streams.accessors.IntegerAccessor;
+import org.globsframework.http.GlobHttpContent;
 import org.globsframework.http.HttpServerRegister;
+import org.globsframework.http.server.apache.GlobHttpApacheBuilder;
+import org.globsframework.http.server.apache.Server;
+import org.globsframework.sample.generic.GenericApiExpose;
 import org.globsframework.sql.*;
 import org.globsframework.sql.annotations.DbTableName;
 import org.globsframework.sql.annotations.DbTableName_;
 import org.globsframework.sql.constraints.Constraints;
 import org.globsframework.sql.drivers.jdbc.JdbcSqlService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CompletableFuture;
 
 /*
@@ -37,7 +43,9 @@ insert in the table and return the newly student.
 
 public class Example1 {
 
-    public static void main(String[] args) {
+    private static final Logger log = LoggerFactory.getLogger(Example1.class);
+
+    public static void main(String[] args) throws InterruptedException {
         Glob argument = ParseCommandLine.parse(ArgumentType.TYPE, args);
         SqlService sqlService = new JdbcSqlService(argument.getNotEmpty(ArgumentType.dbUrl),
                 argument.getNotEmpty(ArgumentType.user),
@@ -50,6 +58,22 @@ public class Example1 {
         }
 
         final HttpServerRegister httpServerRegister = new HttpServerRegister("EstablishmentServer/0.1");
+
+        final byte[] bytes = "some data".getBytes(StandardCharsets.UTF_8);
+
+        httpServerRegister.register("/api/greeting", null)
+                .get(GreetingType.TYPE, null, (body, url, queryParameters, headerType) -> {
+//                    String message = String.format("Hello %s!!!",
+//                            queryParameters.getOrDefault(GreetingType.name, (String) GreetingType.name.getDefaultValue()));
+//                    int sleep = queryParameters.getOpt(GreetingType.sleep).orElse((Integer) GreetingType.sleep.getDefaultValue());
+//                    if (sleep > 0) {
+//                        Thread.sleep(sleep);
+//                    }
+                    return CompletableFuture.completedFuture(GlobHttpContent.TYPE.instantiate()
+                            .set(GlobHttpContent.content, bytes));
+                });
+//                .withExecutor(Executors.newVirtualThreadPerTaskExecutor());
+
         httpServerRegister.register("/student", null)
                 .post(StudentType.TYPE, null, (body, url, queryParameters) -> {
 
@@ -63,7 +87,7 @@ public class Example1 {
                     IntegerAccessor keyGeneratedAccessor = createBuilder.getKeyGeneratedAccessor(StudentType.id);
                     int id;
                     try (SqlRequest insertRequest = createBuilder.getRequest()) {
-                        insertRequest.run();
+                        insertRequest.apply();
                         id = keyGeneratedAccessor.getInteger();
                     }
                     db.commit();
@@ -80,9 +104,20 @@ public class Example1 {
                     return CompletableFuture.completedFuture(createdData);
                 })
                 .declareReturnType(StudentType.TYPE);
-        HttpServerRegister.Server server = httpServerRegister.startAndWaitForStartup(
-                AsyncServerBootstrap.bootstrap(), argument.get(ArgumentType.port, 3000));
+
+        H2ServerBootstrap h2ServerBootstrap = H2ServerBootstrap.bootstrap()
+                .setH2Config(H2Config.DEFAULT)
+                .setIOReactorConfig(IOReactorConfig.custom().setSoReuseAddress(true).build());
+
+        GlobHttpApacheBuilder globHttpApacheBuilder = new GlobHttpApacheBuilder(httpServerRegister);
+        final Server server =
+                globHttpApacheBuilder.startAndWaitForStartup(h2ServerBootstrap,
+                        argument.get(ArgumentType.port, 3100));
+
         System.out.println("Listen on port: " + server.getPort());
+        synchronized (Example1.class) {
+            Example1.class.wait();
+        }
     }
 
     public static class StudentType {
@@ -100,12 +135,10 @@ public class Example1 {
         static {
             GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("Student");
             typeBuilder.addAnnotation(DbTableName.create("students"));
-            TYPE = typeBuilder.unCompleteType();
             id = typeBuilder.declareIntegerField("id", KeyField.ZERO, AutoIncrement.INSTANCE);
             firstName = typeBuilder.declareStringField("firstName");
             lastName = typeBuilder.declareStringField("lastName");
-            typeBuilder.complete();
-//            GlobTypeLoaderFactory.create(StudentType.class).load();
+            TYPE = typeBuilder.build();
         }
     }
 /*
@@ -138,13 +171,28 @@ public class Example1 {
 
         static {
             GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("Argument");
-            TYPE = typeBuilder.unCompleteType();
             dbUrl = typeBuilder.declareStringField("dbUrl");
             user = typeBuilder.declareStringField("user");
             password = typeBuilder.declareStringField("password");
             port = typeBuilder.declareIntegerField("port");
-            typeBuilder.complete();
-//            GlobTypeLoaderFactory.create(ArgumentType.class).load();
+            TYPE = typeBuilder.build();
+        }
+    }
+
+    public static class GreetingType {
+        public static final GlobType TYPE;
+
+        @DefaultString_("World")
+        public static final StringField name;
+
+        @DefaultInteger_(0)
+        public static final IntegerField sleep;
+
+        static {
+            GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("Greeting");
+            name = typeBuilder.declareStringField("name", DefaultString.create("World"));
+            sleep = typeBuilder.declareIntegerField("sleep", DefaultInteger.TYPE.instantiate().set(DefaultInteger.VALUE, 0));
+            TYPE = typeBuilder.build();
         }
     }
 }

@@ -23,6 +23,7 @@ import org.globsframework.core.metamodel.annotations.*;
 import org.globsframework.core.metamodel.fields.*;
 import org.globsframework.core.metamodel.impl.DefaultGlobModel;
 import org.globsframework.core.model.Glob;
+import org.globsframework.core.model.MutableGlob;
 import org.globsframework.core.utils.Files;
 import org.globsframework.core.utils.Strings;
 import org.globsframework.graphql.GQLGlobCaller;
@@ -37,6 +38,9 @@ import org.globsframework.graphql.parser.GqlField;
 import org.globsframework.http.GlobHttpContent;
 import org.globsframework.http.HttpServerRegister;
 import org.globsframework.http.HttpTreatmentWithHeader;
+import org.globsframework.http.openapi.model.GlobOpenApi;
+import org.globsframework.http.server.apache.GlobHttpApacheBuilder;
+import org.globsframework.http.server.apache.Server;
 import org.globsframework.json.GSonUtils;
 import org.globsframework.json.annottations.AllJsonAnnotations;
 import org.globsframework.json.annottations.IsJsonContent;
@@ -61,8 +65,7 @@ import java.util.concurrent.ThreadFactory;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import static java.util.concurrent.Executors.newThreadPerTaskExecutor;
-import static java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor;
+import static java.util.concurrent.Executors.*;
 
 /*
 
@@ -86,7 +89,7 @@ GRAPHQL route under /graphql
  */
 
 public class GenericApiExpose {
-    public static long startAt = System.currentTimeMillis();
+    static long startAt = System.currentTimeMillis();
 
     public static final Logger LOGGER = LoggerFactory.getLogger(GenericApiExpose.class);
 
@@ -144,12 +147,22 @@ public class GenericApiExpose {
         httpServerRegister.register("/api/greeting", null)
                 .get(GreetingParam.TYPE, (body, pathParameters, queryParameters) -> {
                     String message = String.format("Hello %s!!!", queryParameters.get(GreetingParam.name, "world"));
+                    final CompletableFuture<Glob> globCompletableFuture = new CompletableFuture<>();
+                    final MutableGlob msg = GlobHttpContent.TYPE.instantiate().set(GlobHttpContent.content, message.getBytes(StandardCharsets.UTF_8));
                     if (queryParameters.get(GreetingParam.sleep, 0) > 0) {
-                        Thread.sleep(queryParameters.get(GreetingParam.sleep, 0));
+                        try {
+                            Thread.sleep(queryParameters.get(GreetingParam.sleep, 0));
+                        } catch (InterruptedException e) {
+                            throw new RuntimeException(e);
+                        }
+                        globCompletableFuture.complete(msg);
                     }
-                    return CompletableFuture.completedFuture(GreetingResponse.TYPE.instantiate()
-                            .set(GreetingResponse.name, message));
+                    else {
+                        globCompletableFuture.complete(msg);
+                    }
+                    return globCompletableFuture;
                 })
+//                .withExecutor(newThreadPerTaskExecutor(defaultThreadFactory()));
                 .withExecutor(newVirtualThreadPerTaskExecutor());
 
         // for each resource we register post, put, get.
@@ -197,7 +210,7 @@ public class GenericApiExpose {
 
                             try (SqlRequest insertRequest = createBuilder.getRequest()) {
                                 // execute the request.
-                                insertRequest.run();
+                                insertRequest.apply();
                             }
                         } finally {
                             db.commitAndClose();
@@ -224,7 +237,7 @@ public class GenericApiExpose {
                         }
 
                         try (SqlRequest insertRequest = updateBuilder.getRequest()) {
-                            insertRequest.run();
+                            insertRequest.apply();
                         } finally {
                             db.commit();
                         }
@@ -247,7 +260,7 @@ public class GenericApiExpose {
                 StringField keyField = resource.getFieldWithAnnotation(KeyField.UNIQUE_KEY).asStringField();
                 String uuid = pathParameters.getNotEmpty(UrlType.uuid);
                 try (SqlRequest deleteRequest = db.getDeleteRequest(resource, Constraints.equal(keyField, uuid))) {
-                    deleteRequest.run();
+                    deleteRequest.apply();
                 } finally {
                     db.commitAndClose();
                 }
@@ -422,19 +435,17 @@ public class GenericApiExpose {
         }
 
         // register openAPI entrypoint on /api
-        httpServerRegister.registerOpenApi();
+        httpServerRegister.registerOpenApi(new GlobOpenApi(httpServerRegister));
 
         // register to and start apache server.
-        HttpServerRegister.Server httpServerIntegerPair = httpServerRegister.startAndWaitForStartup(
-                H2ServerBootstrap.bootstrap()
-                        .setH2Config(H2Config.DEFAULT)
-//                        .setCanonicalHostName("localhost")
-//                        .setTlsStrategy((sessionLayer, host, localAddress, remoteAddress, attachment, handshakeTimeout) -> {
-//                            throw new RuntimeException("No TLS");
-//                        })
-                        .setIOReactorConfig(IOReactorConfig.custom().setSoReuseAddress(true).build()),
-                argument.get(ArgumentType.port, 4000));
-        System.out.println("Start in " + (System.currentTimeMillis() - startAt) + "ms. Listen on port: " + httpServerIntegerPair.getPort());
+        H2ServerBootstrap h2ServerBootstrap = H2ServerBootstrap.bootstrap()
+                .setH2Config(H2Config.DEFAULT)
+                .setIOReactorConfig(IOReactorConfig.custom().setSoReuseAddress(true).build());
+
+        GlobHttpApacheBuilder globHttpApacheBuilder = new GlobHttpApacheBuilder(httpServerRegister);
+        final Server server =
+                globHttpApacheBuilder.startAndWaitForStartup(h2ServerBootstrap, argument.get(ArgumentType.port, 4000));
+        System.out.println("Start in " + (System.currentTimeMillis() - startAt) + "ms. Listen on port: " + server.getPort());
         synchronized (System.out) {
             System.out.wait();
         }
@@ -506,10 +517,8 @@ public class GenericApiExpose {
 
         static {
             GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("Url");
-            TYPE = typeBuilder.unCompleteType();
             uuid = typeBuilder.declareStringField("uuid");
-            typeBuilder.complete();
-//            GlobTypeLoaderFactory.create(UrlType.class).load();
+            TYPE = typeBuilder.build();
         }
     }
 
@@ -531,14 +540,12 @@ public class GenericApiExpose {
 
         static {
             GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("Argument");
-            TYPE = typeBuilder.unCompleteType();
             dbUrl = typeBuilder.declareStringField("dbUrl", DefaultString.create("jdbc:hsqldb:mem:db"));
             user = typeBuilder.declareStringField("user", DefaultString.create("sa"));
             password = typeBuilder.declareStringField("password", DefaultString.create(""));
             model = typeBuilder.declareStringField("model");
             port = typeBuilder.declareIntegerField("port");
-            typeBuilder.complete();
-//            GlobTypeLoaderFactory.create(ArgumentType.class).load();
+            TYPE = typeBuilder.build();
         }
     }
 
@@ -565,7 +572,6 @@ public class GenericApiExpose {
 
         static {
             GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("Parameter");
-            TYPE = typeBuilder.unCompleteType();
             first = typeBuilder.declareIntegerField("first");
             after = typeBuilder.declareStringField("after");
             last = typeBuilder.declareIntegerField("last");
@@ -573,10 +579,8 @@ public class GenericApiExpose {
             skip = typeBuilder.declareIntegerField("skip");
             order = typeBuilder.declareStringField("order");
             orderBy = typeBuilder.declareStringField("orderBy");
-            typeBuilder.complete();
+            TYPE = typeBuilder.build();
             EMPTY = TYPE.instantiate();
-
-//            GlobTypeLoaderFactory.create(Parameter.class).load();
         }
     }
 
@@ -590,11 +594,9 @@ public class GenericApiExpose {
 
         static {
             GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("GraphQlRequest");
-            TYPE = typeBuilder.unCompleteType();
             query = typeBuilder.declareStringField("query");
             variables = typeBuilder.declareStringField("variables", IsJsonContent.UNIQUE_GLOB);
-            typeBuilder.complete();
-//            GlobTypeLoaderFactory.create(GraphQlRequest.class).load();
+            TYPE = typeBuilder.build();
         }
     }
 
@@ -617,12 +619,9 @@ public class GenericApiExpose {
 
         static {
             GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("Model");
-            TYPE = typeBuilder.unCompleteType();
             dbTypes = typeBuilder.declareStringArrayField("dbTypes", IsJsonContent.UNIQUE_GLOB);
             graphqlTypes = typeBuilder.declareStringField("graphqlTypes", IsJsonContent.UNIQUE_GLOB);
-            typeBuilder.complete();
-
-//            GlobTypeLoaderFactory.create(Model.class).load();
+            TYPE = typeBuilder.build();
         }
     }
 
@@ -633,11 +632,8 @@ public class GenericApiExpose {
 
         static {
             GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("SearchQuery");
-            TYPE = typeBuilder.unCompleteType();
             search = typeBuilder.declareStringField("search");
-            typeBuilder.complete();
-
-//            GlobTypeLoaderFactory.create(SearchQuery.class).load();
+            TYPE = typeBuilder.build();
         }
     }
 
@@ -648,11 +644,8 @@ public class GenericApiExpose {
 
         static {
             GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("EntityQuery");
-            TYPE = typeBuilder.unCompleteType();
             uuid = typeBuilder.declareStringField("uuid");
-            typeBuilder.complete();
-
-//            GlobTypeLoaderFactory.create(EntityQuery.class).load();
+            TYPE = typeBuilder.build();
         }
     }
 
@@ -665,12 +658,9 @@ public class GenericApiExpose {
 
         static {
             GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("GreetingParam");
-            TYPE = typeBuilder.unCompleteType();
             name = typeBuilder.declareStringField("name");
             sleep = typeBuilder.declareIntegerField("sleep");
-            typeBuilder.complete();
-
-//            GlobTypeLoaderFactory.create(GreetingParam.class).load();
+            TYPE = typeBuilder.build();
         }
     }
 
@@ -681,12 +671,8 @@ public class GenericApiExpose {
 
         static {
             GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("GreetingResponse");
-            TYPE = typeBuilder.unCompleteType();
             name = typeBuilder.declareStringField("name");
-            typeBuilder.complete();
-
-//            GlobTypeLoaderFactory.create(GreetingResponse.class).load();
+            TYPE = typeBuilder.build();
         }
     }
-
 }
