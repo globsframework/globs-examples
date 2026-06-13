@@ -37,6 +37,9 @@ import org.globsframework.graphql.parser.GqlField;
 import org.globsframework.http.GlobHttpContent;
 import org.globsframework.http.HttpServerRegister;
 import org.globsframework.http.HttpTreatmentWithHeader;
+import org.globsframework.http.openapi.model.GlobOpenApi;
+import org.globsframework.http.server.apache.GlobHttpApacheBuilder;
+import org.globsframework.http.server.apache.Server;
 import org.globsframework.json.GSonUtils;
 import org.globsframework.json.annottations.AllJsonAnnotations;
 import org.globsframework.json.annottations.IsJsonContent;
@@ -197,7 +200,7 @@ public class GenericApiExpose {
 
                             try (SqlRequest insertRequest = createBuilder.getRequest()) {
                                 // execute the request.
-                                insertRequest.run();
+                                insertRequest.apply();
                             }
                         } finally {
                             db.commitAndClose();
@@ -224,7 +227,7 @@ public class GenericApiExpose {
                         }
 
                         try (SqlRequest insertRequest = updateBuilder.getRequest()) {
-                            insertRequest.run();
+                            insertRequest.apply();
                         } finally {
                             db.commit();
                         }
@@ -247,7 +250,7 @@ public class GenericApiExpose {
                 StringField keyField = resource.getFieldWithAnnotation(KeyField.UNIQUE_KEY).asStringField();
                 String uuid = pathParameters.getNotEmpty(UrlType.uuid);
                 try (SqlRequest deleteRequest = db.getDeleteRequest(resource, Constraints.equal(keyField, uuid))) {
-                    deleteRequest.run();
+                    deleteRequest.apply();
                 } finally {
                     db.commitAndClose();
                 }
@@ -422,19 +425,17 @@ public class GenericApiExpose {
         }
 
         // register openAPI entrypoint on /api
-        httpServerRegister.registerOpenApi();
+        httpServerRegister.registerOpenApi(new GlobOpenApi(httpServerRegister));
 
         // register to and start apache server.
-        HttpServerRegister.Server httpServerIntegerPair = httpServerRegister.startAndWaitForStartup(
-                H2ServerBootstrap.bootstrap()
-                        .setH2Config(H2Config.DEFAULT)
-//                        .setCanonicalHostName("localhost")
-//                        .setTlsStrategy((sessionLayer, host, localAddress, remoteAddress, attachment, handshakeTimeout) -> {
-//                            throw new RuntimeException("No TLS");
-//                        })
-                        .setIOReactorConfig(IOReactorConfig.custom().setSoReuseAddress(true).build()),
-                argument.get(ArgumentType.port, 4000));
-        System.out.println("Start in " + (System.currentTimeMillis() - startAt) + "ms. Listen on port: " + httpServerIntegerPair.getPort());
+        H2ServerBootstrap h2ServerBootstrap = H2ServerBootstrap.bootstrap()
+                .setH2Config(H2Config.DEFAULT)
+                .setIOReactorConfig(IOReactorConfig.custom().setSoReuseAddress(true).build());
+
+        GlobHttpApacheBuilder globHttpApacheBuilder = new GlobHttpApacheBuilder(httpServerRegister);
+        final Server server =
+                globHttpApacheBuilder.startAndWaitForStartup(h2ServerBootstrap, argument.get(ArgumentType.port, 4000));
+        System.out.println("Start in " + (System.currentTimeMillis() - startAt) + "ms. Listen on port: " + server.getPort());
         synchronized (System.out) {
             System.out.wait();
         }
