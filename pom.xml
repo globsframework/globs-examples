@@ -123,28 +123,22 @@
         <dependency>
             <groupId>org.globsframework</groupId>
             <artifactId>globs</artifactId>
-            <version>4.1.0</version>
+            <version>5.4.0</version>
         </dependency>
         <dependency>
             <groupId>org.globsframework</groupId>
             <artifactId>globs-commandline</artifactId>
-            <version>4.1.0</version>
+            <version>5.0.0</version>
         </dependency>
         <dependency>
             <groupId>org.globsframework</groupId>
             <artifactId>globs-http</artifactId>
-            <version>4.1.0</version>
-            <exclusions>
-                <exclusion>
-                    <groupId>io.etcd</groupId>
-                    <artifactId>jetcd-core</artifactId>
-                </exclusion>
-            </exclusions>
+            <version>5.1.0</version>
         </dependency>
         <dependency>
             <groupId>org.globsframework</groupId>
             <artifactId>globs-sql</artifactId>
-            <version>4.1.0</version>
+            <version>5.0.0</version>
             <exclusions>
                 <exclusion>
                     <groupId>org.mariadb.jdbc</groupId>
@@ -163,14 +157,14 @@
         <dependency>
             <groupId>org.globsframework</groupId>
             <artifactId>globs-graphql</artifactId>
-            <version>4.1.0</version>
+            <version>5.0.0</version>
         </dependency>
 
-        <dependency>
-            <groupId>org.globsframework</groupId>
-            <artifactId>globs-generate</artifactId>
-            <version>4.1.0</version>
-        </dependency>
+<!--        <dependency>-->
+<!--            <groupId>org.globsframework</groupId>-->
+<!--            <artifactId>globs-generate</artifactId>-->
+<!--            <version>4.1.0-SNAPSHOT</version>-->
+<!--        </dependency>-->
 
         <dependency>
             <groupId>com.zaxxer</groupId>
