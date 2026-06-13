@@ -506,10 +506,8 @@ public class GenericApiExpose {
 
         static {
             GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("Url");
-            TYPE = typeBuilder.unCompleteType();
             uuid = typeBuilder.declareStringField("uuid");
-            typeBuilder.complete();
-//            GlobTypeLoaderFactory.create(UrlType.class).load();
+            TYPE = typeBuilder.build();
         }
     }
 
@@ -531,14 +529,12 @@ public class GenericApiExpose {
 
         static {
             GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("Argument");
-            TYPE = typeBuilder.unCompleteType();
             dbUrl = typeBuilder.declareStringField("dbUrl", DefaultString.create("jdbc:hsqldb:mem:db"));
             user = typeBuilder.declareStringField("user", DefaultString.create("sa"));
             password = typeBuilder.declareStringField("password", DefaultString.create(""));
             model = typeBuilder.declareStringField("model");
             port = typeBuilder.declareIntegerField("port");
-            typeBuilder.complete();
-//            GlobTypeLoaderFactory.create(ArgumentType.class).load();
+            TYPE = typeBuilder.build();
         }
     }
 
@@ -565,7 +561,6 @@ public class GenericApiExpose {
 
         static {
             GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("Parameter");
-            TYPE = typeBuilder.unCompleteType();
             first = typeBuilder.declareIntegerField("first");
             after = typeBuilder.declareStringField("after");
             last = typeBuilder.declareIntegerField("last");
@@ -573,10 +568,8 @@ public class GenericApiExpose {
             skip = typeBuilder.declareIntegerField("skip");
             order = typeBuilder.declareStringField("order");
             orderBy = typeBuilder.declareStringField("orderBy");
-            typeBuilder.complete();
+            TYPE = typeBuilder.build();
             EMPTY = TYPE.instantiate();
-
-//            GlobTypeLoaderFactory.create(Parameter.class).load();
         }
     }
 
@@ -590,11 +583,9 @@ public class GenericApiExpose {
 
         static {
             GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("GraphQlRequest");
-            TYPE = typeBuilder.unCompleteType();
             query = typeBuilder.declareStringField("query");
             variables = typeBuilder.declareStringField("variables", IsJsonContent.UNIQUE_GLOB);
-            typeBuilder.complete();
-//            GlobTypeLoaderFactory.create(GraphQlRequest.class).load();
+            TYPE = typeBuilder.build();
         }
     }
 
@@ -617,12 +608,9 @@ public class GenericApiExpose {
 
         static {
             GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("Model");
-            TYPE = typeBuilder.unCompleteType();
             dbTypes = typeBuilder.declareStringArrayField("dbTypes", IsJsonContent.UNIQUE_GLOB);
             graphqlTypes = typeBuilder.declareStringField("graphqlTypes", IsJsonContent.UNIQUE_GLOB);
-            typeBuilder.complete();
-
-//            GlobTypeLoaderFactory.create(Model.class).load();
+            TYPE = typeBuilder.build();
         }
     }
 
@@ -633,11 +621,8 @@ public class GenericApiExpose {
 
         static {
             GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("SearchQuery");
-            TYPE = typeBuilder.unCompleteType();
             search = typeBuilder.declareStringField("search");
-            typeBuilder.complete();
-
-//            GlobTypeLoaderFactory.create(SearchQuery.class).load();
+            TYPE = typeBuilder.build();
         }
     }
 
@@ -648,11 +633,8 @@ public class GenericApiExpose {
 
         static {
             GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("EntityQuery");
-            TYPE = typeBuilder.unCompleteType();
             uuid = typeBuilder.declareStringField("uuid");
-            typeBuilder.complete();
-
-//            GlobTypeLoaderFactory.create(EntityQuery.class).load();
+            TYPE = typeBuilder.build();
         }
     }
 
@@ -665,12 +647,9 @@ public class GenericApiExpose {
 
         static {
             GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("GreetingParam");
-            TYPE = typeBuilder.unCompleteType();
             name = typeBuilder.declareStringField("name");
             sleep = typeBuilder.declareIntegerField("sleep");
-            typeBuilder.complete();
-
-//            GlobTypeLoaderFactory.create(GreetingParam.class).load();
+            TYPE = typeBuilder.build();
         }
     }
 
@@ -681,11 +660,8 @@ public class GenericApiExpose {
 
         static {
             GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("GreetingResponse");
-            TYPE = typeBuilder.unCompleteType();
             name = typeBuilder.declareStringField("name");
-            typeBuilder.complete();
-
-//            GlobTypeLoaderFactory.create(GreetingResponse.class).load();
+            TYPE = typeBuilder.build();
         }
     }
 

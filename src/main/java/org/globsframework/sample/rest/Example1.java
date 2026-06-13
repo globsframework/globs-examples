@@ -100,12 +100,10 @@ public class Example1 {
         static {
             GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("Student");
             typeBuilder.addAnnotation(DbTableName.create("students"));
-            TYPE = typeBuilder.unCompleteType();
             id = typeBuilder.declareIntegerField("id", KeyField.ZERO, AutoIncrement.INSTANCE);
             firstName = typeBuilder.declareStringField("firstName");
             lastName = typeBuilder.declareStringField("lastName");
-            typeBuilder.complete();
-//            GlobTypeLoaderFactory.create(StudentType.class).load();
+            TYPE = typeBuilder.build();
         }
     }
 /*
@@ -138,13 +136,11 @@ public class Example1 {
 
         static {
             GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("Argument");
-            TYPE = typeBuilder.unCompleteType();
             dbUrl = typeBuilder.declareStringField("dbUrl");
             user = typeBuilder.declareStringField("user");
             password = typeBuilder.declareStringField("password");
             port = typeBuilder.declareIntegerField("port");
-            typeBuilder.complete();
-//            GlobTypeLoaderFactory.create(ArgumentType.class).load();
+            TYPE = typeBuilder.build();
         }
     }
 }

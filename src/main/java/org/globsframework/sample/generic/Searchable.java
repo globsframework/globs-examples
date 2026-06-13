@@ -23,15 +23,11 @@ public class Searchable {
 
     static {
         GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("Searchable");
-        TYPE = typeBuilder.unCompleteType();
-        typeBuilder.complete();
+        typeBuilder.register(GlobCreateFromAnnotation.class, Searchable::create);
+        TYPE = typeBuilder.build();
         UNIQUE_KEY = KeyBuilder.newEmptyKey(TYPE);
         UNIQUE_INSTANCE = TYPE.instantiate();
-        typeBuilder.register(GlobCreateFromAnnotation.class, Searchable::create);
 
-//        GlobTypeLoader loader = GlobTypeLoaderFactory.create(Searchable.class);
-//        loader.register(GlobCreateFromAnnotation.class, Searchable::create);
-//        loader.load();
     }
 
     private static Glob create(Annotation annotation) {

@@ -25,12 +25,11 @@ public class Link {
 
     static {
         GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("Link");
-        TYPE = typeBuilder.unCompleteType();
         fromField = typeBuilder.declareStringField("from");
         toField = typeBuilder.declareStringField("to");
-        typeBuilder.complete();
-        KEY = KeyBuilder.newEmptyKey(TYPE);
         typeBuilder.register(GlobCreateFromAnnotation.class, Link::create);
+        TYPE = typeBuilder.build();
+        KEY = KeyBuilder.newEmptyKey(TYPE);
 
 //        GlobTypeLoader loader = GlobTypeLoaderFactory.create(Link.class);
 //        loader.register(GlobCreateFromAnnotation.class, Link::create);
