@@ -19,12 +19,13 @@ import org.apache.hc.core5.http2.impl.nio.bootstrap.H2ServerBootstrap;
 import org.apache.hc.core5.reactor.IOReactorConfig;
 import org.globsframework.commandline.ParseCommandLine;
 import org.globsframework.core.metamodel.*;
-import org.globsframework.core.metamodel.annotations.*;
+import org.globsframework.core.metamodel.annotations.AllCoreAnnotations;
+import org.globsframework.core.metamodel.annotations.DefaultString;
+import org.globsframework.core.metamodel.annotations.KeyField;
 import org.globsframework.core.metamodel.fields.*;
 import org.globsframework.core.metamodel.impl.DefaultGlobModel;
 import org.globsframework.core.model.Glob;
 import org.globsframework.core.model.MutableGlob;
-import org.globsframework.core.utils.Files;
 import org.globsframework.core.utils.Strings;
 import org.globsframework.graphql.GQLGlobCaller;
 import org.globsframework.graphql.GQLGlobCallerBuilder;
@@ -44,7 +45,6 @@ import org.globsframework.http.server.apache.Server;
 import org.globsframework.json.GSonUtils;
 import org.globsframework.json.annottations.AllJsonAnnotations;
 import org.globsframework.json.annottations.IsJsonContent;
-import org.globsframework.json.annottations.IsJsonContent_;
 import org.globsframework.sql.*;
 import org.globsframework.sql.annotations.AllSqlAnnotations;
 import org.globsframework.sql.constraints.Constraint;
@@ -65,7 +65,8 @@ import java.util.concurrent.ThreadFactory;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import static java.util.concurrent.Executors.*;
+import static java.util.concurrent.Executors.newThreadPerTaskExecutor;
+import static java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor;
 
 /*
 
@@ -111,7 +112,10 @@ public class GenericApiExpose {
                 MappingHelper.get(typeOfDb), new HikariDataSource(configuration), typeOfDb);
 
 
-        String strModel = Files.read(new FileInputStream(argument.getNotEmpty(ArgumentType.model)), StandardCharsets.UTF_8);
+        String strModel;
+        try (FileInputStream fileInputStream = new FileInputStream(argument.getNotEmpty(ArgumentType.model))) {
+            strModel = new String(fileInputStream.readAllBytes(), StandardCharsets.UTF_8);
+        }
 
         Glob model = GSonUtils.decode(strModel, Model.TYPE);
 
@@ -156,8 +160,7 @@ public class GenericApiExpose {
                             throw new RuntimeException(e);
                         }
                         globCompletableFuture.complete(msg);
-                    }
-                    else {
+                    } else {
                         globCompletableFuture.complete(msg);
                     }
                     return globCompletableFuture;
@@ -283,7 +286,7 @@ public class GenericApiExpose {
 
             // loader from root (so without parent  ).
 
-            GlobField queryField = graphQLSchemaType.get().getField("query").asGlobField();
+            GlobField<?> queryField = graphQLSchemaType.get().getField("query").asGlobField();
 
             GlobType queryType = queryField.getTargetType();
 
@@ -292,7 +295,7 @@ public class GenericApiExpose {
                 field.findOptAnnotation(GQLQueryParam.KEY)
                         .filter(annotation -> annotation.get(GQLQueryParam.name).equals(EntityQuery.TYPE.getName()))
                         .ifPresent(glob -> {
-                            GlobField globField = field.asGlobField();
+                            GlobField<?> globField = field.asGlobField();
                             GlobType targetType = globField.getTargetType();
                             subObject.add(targetType);
 
@@ -308,7 +311,7 @@ public class GenericApiExpose {
                 field.findOptAnnotation(GQLQueryParam.KEY)
                         .filter(annotation -> annotation.get(GQLQueryParam.name).equals(SearchQuery.TYPE.getName()))
                         .ifPresent(glob -> {
-                            GlobArrayField globField = field.asGlobArrayField();
+                            GlobArrayField<?> globField = field.asGlobArrayField();
                             GlobType targetType = globField.getTargetType();
                             subObject.add(targetType);
                             String dbTypeName = targetType.getAnnotation(DbTarget.KEY).get(DbTarget.dbResource);
@@ -329,7 +332,7 @@ public class GenericApiExpose {
                     Glob linkAnnotation = field.findAnnotation(Link.KEY);
 
                     if (field.hasAnnotation(IsConnection.UNIQUE_KEY)) {
-                        GlobField connectionField = field.asGlobField();
+                        GlobField<?> connectionField = field.asGlobField();
                         GlobType gqlTargetField = connectionField.getTargetType().getField("edges").asGlobArrayField().getTargetType()
                                 .getField("node").asGlobField().getTargetType();
                         GlobType targetResource = resources.getType(gqlTargetField.getAnnotation(DbTarget.KEY).get(DbTarget.dbResource));
@@ -355,7 +358,7 @@ public class GenericApiExpose {
                                 }, uuid, Parameter.orderBy);
                     } else if (linkAnnotation != null) {
                         GlobType targetType = field instanceof GlobField ? field.asGlobField().getTargetType() :
-                                field instanceof GlobArrayField ? field.asGlobArrayField().getTargetType() : null;
+                                field instanceof GlobArrayField<?> ? field.asGlobArrayField().getTargetType() : null;
                         if (targetType != null) {
                             if (subObject.add(targetType)) {
                                 remainning.add(targetType);
@@ -512,7 +515,6 @@ public class GenericApiExpose {
     public static class UrlType {
         public static final GlobType TYPE;
 
-        @FieldName_("uuid")
         public static final StringField uuid;
 
         static {
@@ -525,13 +527,10 @@ public class GenericApiExpose {
     public static class ArgumentType {
         public static final GlobType TYPE;
 
-        @DefaultString_("jdbc:hsqldb:mem:db")
         public static final StringField dbUrl;
 
-        @DefaultString_("sa")
         public static final StringField user;
 
-        @DefaultString_("")
         public static final StringField password;
 
         public static final StringField model;
@@ -567,7 +566,6 @@ public class GenericApiExpose {
 
         public static final StringField orderBy; //
 
-        @InitUniqueGlob
         public static final Glob EMPTY;
 
         static {
@@ -589,7 +587,6 @@ public class GenericApiExpose {
 
         public static final StringField query;
 
-        @IsJsonContent_
         public static final StringField variables;
 
         static {
@@ -611,10 +608,8 @@ public class GenericApiExpose {
     public static class Model {
         public static final GlobType TYPE;
 
-        @IsJsonContent_
         public static final StringArrayField dbTypes;
 
-        @IsJsonContent_
         public static final StringField graphqlTypes;
 
         static {

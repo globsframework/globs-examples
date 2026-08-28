@@ -14,6 +14,11 @@ import graphql.schema.idl.RuntimeWiring;
 import graphql.schema.idl.SchemaGenerator;
 import graphql.schema.idl.SchemaParser;
 import graphql.schema.idl.TypeDefinitionRegistry;
+import org.apache.hc.client5.http.classic.methods.HttpPost;
+import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
+import org.apache.hc.client5.http.impl.classic.HttpClients;
+import org.apache.hc.core5.http.ContentType;
+import org.apache.hc.core5.http.io.entity.StringEntity;
 import org.apache.hc.core5.http2.config.H2Config;
 import org.apache.hc.core5.http2.impl.nio.bootstrap.H2ServerBootstrap;
 import org.apache.hc.core5.reactor.IOReactorConfig;
@@ -21,7 +26,8 @@ import org.globsframework.commandline.ParseCommandLine;
 import org.globsframework.core.metamodel.GlobType;
 import org.globsframework.core.metamodel.GlobTypeBuilder;
 import org.globsframework.core.metamodel.GlobTypeBuilderFactory;
-import org.globsframework.core.metamodel.annotations.*;
+import org.globsframework.core.metamodel.annotations.DefaultString;
+import org.globsframework.core.metamodel.annotations.KeyField;
 import org.globsframework.core.metamodel.fields.*;
 import org.globsframework.core.metamodel.impl.DefaultGlobModel;
 import org.globsframework.core.model.Glob;
@@ -34,7 +40,9 @@ import org.globsframework.graphql.GQLGlobCallerBuilder;
 import org.globsframework.graphql.GlobSchemaGenerator;
 import org.globsframework.graphql.OnLoad;
 import org.globsframework.graphql.db.ConnectionBuilder;
-import org.globsframework.graphql.model.*;
+import org.globsframework.graphql.model.GQLPageInfo;
+import org.globsframework.graphql.model.GQLQueryParam;
+import org.globsframework.graphql.model.GraphQlResponse;
 import org.globsframework.graphql.parser.GqlField;
 import org.globsframework.http.GlobHttpContent;
 import org.globsframework.http.HttpServerRegister;
@@ -44,10 +52,8 @@ import org.globsframework.http.server.apache.GlobHttpApacheBuilder;
 import org.globsframework.http.server.apache.Server;
 import org.globsframework.json.GSonUtils;
 import org.globsframework.json.annottations.IsJsonContent;
-import org.globsframework.json.annottations.IsJsonContent_;
 import org.globsframework.sql.*;
 import org.globsframework.sql.annotations.DbTableName;
-import org.globsframework.sql.annotations.DbTableName_;
 import org.globsframework.sql.constraints.Constraint;
 import org.globsframework.sql.constraints.Constraints;
 import org.globsframework.sql.drivers.jdbc.DataSourceSqlService;
@@ -58,9 +64,11 @@ import org.slf4j.LoggerFactory;
 
 import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
+import java.time.ZonedDateTime;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -189,7 +197,8 @@ public class Example2 {
         for (GlobType resource : resources) {
             httpServerRegister.register("/api/" + resource.getName(), null)
                     .post(resource, null, (body, pathParameters, queryParameters) -> {
-
+                        long start = System.nanoTime();
+                        String status = "OK";
                         // get the key
                         StringField keyField = resource.getKeyFields()[0].asStringField();
                         String uuid = UUID.randomUUID().toString();
@@ -212,16 +221,21 @@ public class Example2 {
                                 // execute the request.
                                 insertRequest.apply();
                             }
+                            return retrieveResource(resource, db, keyField, uuid);
+                        } catch (Exception e) {
+                            status = "ERROR";
+                            throw e;
                         } finally {
                             db.commitAndClose();
+                            publishToES(argument, "POST", resource.getName(), TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start), status);
                         }
-
-                        return retrieveResource(resource, db, keyField, uuid);
                     })
                     .declareReturnType(resource);
 
             HttpServerRegister.Verb onUrl = httpServerRegister.register("/api/" + resource.getName() + "/{uuid}", UrlType.TYPE);
             onUrl.put(resource, null, (body, pathParameters, queryParameters) -> {
+                        long start = System.nanoTime();
+                        String status = "OK";
                         SqlConnection db = sqlService.getDb();
                         StringField keyField = resource.getKeyFields()[0].asStringField();
                         String uuid = pathParameters.getNotEmpty(UrlType.uuid);
@@ -235,32 +249,50 @@ public class Example2 {
 
                         try (SqlRequest insertRequest = updateBuilder.getRequest()) {
                             insertRequest.apply();
+                            return retrieveResource(resource, db, keyField, uuid);
+                        } catch (Exception e) {
+                            status = "ERROR";
+                            throw e;
                         } finally {
                             db.commit();
+                            publishToES(argument, "PUT", resource.getName(), TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start), status);
                         }
-
-                        return retrieveResource(resource, db, keyField, uuid);
                     })
                     .declareReturnType(resource);
 
             onUrl.get(null, (body, pathParameters, queryParameters) -> {
+                        long start = System.nanoTime();
+                        String status = "OK";
                         SqlConnection db = sqlService.getDb();
                         StringField keyField = resource.getKeyFields()[0].asStringField();
                         String uuid = pathParameters.getNotEmpty(UrlType.uuid);
-                        return retrieveResource(resource, db, keyField, uuid);
+                        try {
+                            return retrieveResource(resource, db, keyField, uuid);
+                        } catch (Exception e) {
+                            status = "ERROR";
+                            throw e;
+                        } finally {
+                            publishToES(argument, "GET", resource.getName(), TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start), status);
+                        }
                     })
                     .declareReturnType(resource);
 
             onUrl.delete(null, (body, pathParameters, queryParameters) -> {
+                long start = System.nanoTime();
+                String status = "OK";
                 SqlConnection db = sqlService.getDb();
                 StringField keyField = resource.getKeyFields()[0].asStringField();
                 String uuid = pathParameters.getNotEmpty(UrlType.uuid);
                 try (SqlRequest deleteRequest = db.getDeleteRequest(resource, Constraints.equal(keyField, uuid))) {
                     deleteRequest.apply();
+                    return CompletableFuture.completedFuture(null);
+                } catch (Exception e) {
+                    status = "ERROR";
+                    throw e;
                 } finally {
                     db.commitAndClose();
+                    publishToES(argument, "DELETE", resource.getName(), TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start), status);
                 }
-                return CompletableFuture.completedFuture(null);
             });
         }
 
@@ -284,6 +316,7 @@ public class Example2 {
                     final Gson gson = new Gson();
 
                     public CompletableFuture<Glob> consume(Glob body, Glob url, Glob queryParameters, Glob header) throws Exception {
+                        long start = System.nanoTime();
                         String query = body.get(GraphQlRequest.query);
 
                         // hack to response to query on schema.
@@ -314,10 +347,13 @@ public class Example2 {
                                 .thenApply(glob -> GraphQlResponse.TYPE.instantiate().set(GraphQlResponse.data, GSonUtils.encode(glob, false)))
                                 .handle((response, throwable) -> {
                                     gqlContext.dbConnection.commitAndClose();
+                                    long duration = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
                                     if (throwable != null) {
+                                        publishToES(argument, "GRAPHQL", "graphql", duration, "ERROR");
                                         return GraphQlResponse.TYPE.instantiate()
                                                 .set(GraphQlResponse.errorMessage, throwable.getMessage());
                                     } else {
+                                        publishToES(argument, "GRAPHQL", "graphql", duration, "OK");
                                         return response;
                                     }
                                 });
@@ -352,6 +388,31 @@ public class Example2 {
         synchronized (System.out) {
             System.out.wait();
         }
+    }
+
+    private static void publishToES(Glob argument, String verb, String resource, long duration, String status) {
+        String esUrl = argument.get(ArgumentType.esUrl);
+        if (Strings.isNullOrEmpty(esUrl)) {
+            return;
+        }
+        String esIndex = argument.get(ArgumentType.esIndex);
+        MutableGlob stats = StatsType.TYPE.instantiate()
+                .set(StatsType.verb, verb)
+                .set(StatsType.resource, resource)
+                .set(StatsType.duration, duration)
+                .set(StatsType.date, ZonedDateTime.now())
+                .set(StatsType.status, status);
+
+        CompletableFuture.runAsync(() -> {
+            try (CloseableHttpClient httpClient = HttpClients.createDefault()) {
+                String targetUrl = esUrl + "/" + esIndex + "/_doc";
+                HttpPost post = new HttpPost(targetUrl);
+                post.setEntity(new StringEntity(GSonUtils.encode(stats, false), ContentType.APPLICATION_JSON));
+                httpClient.execute(post, response -> null);
+            } catch (Exception e) {
+                LOGGER.error("Failed to publish to ES", e);
+            }
+        });
     }
 
     private static void populate(SqlService sqlService) {
@@ -453,10 +514,8 @@ public class Example2 {
     }
 
     public static class DbClassType {
-        @DbTableName_("classes")
         public static final GlobType TYPE;
 
-        @KeyField_
         public static final StringField uuid;
 
         public static final StringField name;
@@ -474,10 +533,8 @@ public class Example2 {
     }
 
     public static class DbProfessorType {
-        @DbTableName_("professors")
         public static final GlobType TYPE;
 
-        @KeyField_
         public static final StringField uuid;
 
         public static final StringField firstName;
@@ -495,10 +552,8 @@ public class Example2 {
     }
 
     public static class DbStudentType {
-        @DbTableName_("students")
         public static final GlobType TYPE;
 
-        @KeyField_
         public static final StringField uuid;
 
         public static final StringField firstName;
@@ -521,7 +576,6 @@ public class Example2 {
     public static class UrlType {
         public static final GlobType TYPE;
 
-        @FieldName_("uuid")
         public static final StringField uuid;
 
         static {
@@ -531,19 +585,39 @@ public class Example2 {
         }
     }
 
+    public static class StatsType {
+        public static final GlobType TYPE;
+        public static final StringField verb;
+        public static final StringField resource;
+        public static final LongField duration;
+        public static final DateTimeField date;
+        public static final StringField status;
+
+        static {
+            GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("Stats");
+            verb = typeBuilder.declareStringField("verb");
+            resource = typeBuilder.declareStringField("resource");
+            duration = typeBuilder.declareLongField("duration");
+            date = typeBuilder.declareDateTimeField("date");
+            status = typeBuilder.declareStringField("status");
+            TYPE = typeBuilder.build();
+        }
+    }
+
     public static class ArgumentType {
         public static final GlobType TYPE;
 
-        @DefaultString_("jdbc:hsqldb:mem:db")
         public static final StringField dbUrl;
 
-        @DefaultString_("sa")
         public static final StringField user;
 
-        @DefaultString_("")
         public static final StringField password;
 
         public static final IntegerField port;
+
+        public static final StringField esUrl;
+
+        public static final StringField esIndex;
 
         static {
             GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("argument");
@@ -551,6 +625,8 @@ public class Example2 {
             user = typeBuilder.declareStringField("user", DefaultString.create("sa"));
             password = typeBuilder.declareStringField("password", DefaultString.create(""));
             port = typeBuilder.declareIntegerField("port");
+            esUrl = typeBuilder.declareStringField("esUrl", DefaultString.create(""));
+            esIndex = typeBuilder.declareStringField("esIndex", DefaultString.create("stats"));
             TYPE = typeBuilder.build();
         }
     }
@@ -558,8 +634,7 @@ public class Example2 {
     public static class SchemaType {
         public static final GlobType TYPE;
 
-        @Target(QueryType.class)
-        public static final GlobField query;
+        public static final GlobField<QueryType> query;
 
         static {
             GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("schema");
@@ -571,31 +646,17 @@ public class Example2 {
     public static class QueryType {
         public static final GlobType TYPE;
 
-        @GQLQueryParam_(SearchQuery.class)
-        @Target(GQLProfessor.class)
-        public static final GlobArrayField professors;
+        public static final GlobArrayField<GQLProfessor> professors;
 
-        @GQLQueryParam_(SearchQuery.class)
-        @Target(GQLClass.class)
-        @FieldName_("classes")
-        public static final GlobArrayField classes;
+        public static final GlobArrayField<GQLClass> classes;
 
-        @GQLQueryParam_(SearchQuery.class)
-        @Target(GQLStudent.class)
-        public static final GlobArrayField students;
+        public static final GlobArrayField<GQLStudent> students;
 
-        @GQLQueryParam_(EntityQuery.class)
-        @Target(GQLProfessor.class)
-        public static final GlobField professor;
+        public static final GlobField<GQLProfessor> professor;
 
-        @GQLQueryParam_(EntityQuery.class)
-        @Target(GQLClass.class)
-        @FieldName_("class")
-        public static final GlobField class_;
+        public static final GlobField<GQLClass> class_;
 
-        @GQLQueryParam_(EntityQuery.class)
-        @Target(GQLStudent.class)
-        public static final GlobField student;
+        public static final GlobField<GQLStudent> student;
 
         static {
             GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("query");
@@ -646,12 +707,9 @@ public class Example2 {
 
         public static final StringField name;
 
-        @Target(GQLProfessor.class)
-        public static final GlobField principalProfessor;
+        public static final GlobField<GQLProfessor> principalProfessor;
 
-        @Target(StudentConnection.class)
-        @GQLQueryParam_(Parameter.class)
-        public static final GlobField students;
+        public static final GlobField<StudentConnection> students;
 
         static {
             GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("GQLClass");
@@ -673,9 +731,7 @@ public class Example2 {
 
         public static final StringField lastName;
 
-        @Target(GQLClass.class)
-        @FieldName_("class")
-        public static final GlobField class_;
+        public static final GlobField<GQLClass> class_;
 
         static {
             GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("GQLStudent");
@@ -696,8 +752,7 @@ public class Example2 {
 
         public static final StringField lastName;
 
-        @Target(GQLClass.class)
-        public static final GlobArrayField mainClasses;
+        public static final GlobArrayField<GQLClass> mainClasses;
 
         static {
             GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("GQLProfessor");
@@ -714,12 +769,9 @@ public class Example2 {
 
         public static final IntegerField totalCount;
 
-        @Target(StudentHedge.class)
-        public static final GlobArrayField edges;
+        public static final GlobArrayField<StudentHedge> edges;
 
-        @Target(GQLPageInfo.class)
-        @GQLMandatory_
-        public static final GlobField pageInfo;
+        public static final GlobField<GQLPageInfo> pageInfo;
 
         static {
             GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("StudentConnection");
@@ -733,8 +785,7 @@ public class Example2 {
     public static class StudentHedge {
         public static final GlobType TYPE;
 
-        @Target(GQLStudent.class)
-        public static final GlobField node;
+        public static final GlobField<GQLStudent> node;
 
         static {
             GlobTypeBuilder typeBuilder = GlobTypeBuilderFactory.create("StudentHedge");
@@ -760,7 +811,6 @@ public class Example2 {
 
         public static final StringField orderBy; //
 
-        @InitUniqueGlob
         public static final Glob EMPTY;
 
         static {
@@ -783,7 +833,6 @@ public class Example2 {
 
         public static final StringField query;
 
-        @IsJsonContent_
         public static final StringField variables;
 
         static {

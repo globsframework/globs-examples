@@ -68,7 +68,7 @@ public static class SchemaType {
     public static GlobType TYPE;
 
     @Target(QueryType.class)
-    public static GlobField query;
+    public static GlobField<?> query;
 
     static {
         GlobTypeLoaderFactory.create(SchemaType.class).load();

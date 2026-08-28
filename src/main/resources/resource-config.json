@@ -1,0 +1,7 @@
+{
+  "resources": [
+    {
+    "globs": "org/hsqldb/resources/*"
+    }
+  ]
+}

@@ -7,7 +7,10 @@ import org.globsframework.commandline.ParseCommandLine;
 import org.globsframework.core.metamodel.GlobType;
 import org.globsframework.core.metamodel.GlobTypeBuilder;
 import org.globsframework.core.metamodel.GlobTypeBuilderFactory;
-import org.globsframework.core.metamodel.annotations.*;
+import org.globsframework.core.metamodel.annotations.AutoIncrement;
+import org.globsframework.core.metamodel.annotations.DefaultInteger;
+import org.globsframework.core.metamodel.annotations.DefaultString;
+import org.globsframework.core.metamodel.annotations.KeyField;
 import org.globsframework.core.metamodel.fields.IntegerField;
 import org.globsframework.core.metamodel.fields.StringField;
 import org.globsframework.core.model.Glob;
@@ -16,10 +19,8 @@ import org.globsframework.http.GlobHttpContent;
 import org.globsframework.http.HttpServerRegister;
 import org.globsframework.http.server.apache.GlobHttpApacheBuilder;
 import org.globsframework.http.server.apache.Server;
-import org.globsframework.sample.generic.GenericApiExpose;
 import org.globsframework.sql.*;
 import org.globsframework.sql.annotations.DbTableName;
-import org.globsframework.sql.annotations.DbTableName_;
 import org.globsframework.sql.constraints.Constraints;
 import org.globsframework.sql.drivers.jdbc.JdbcSqlService;
 import org.slf4j.Logger;
@@ -121,11 +122,8 @@ public class Example1 {
     }
 
     public static class StudentType {
-        @DbTableName_("students")
         public static final GlobType TYPE;
 
-        @KeyField_
-        @AutoIncrement_
         public static final IntegerField id;
 
         public static final StringField firstName;
@@ -182,10 +180,8 @@ public class Example1 {
     public static class GreetingType {
         public static final GlobType TYPE;
 
-        @DefaultString_("World")
         public static final StringField name;
 
-        @DefaultInteger_(0)
         public static final IntegerField sleep;
 
         static {

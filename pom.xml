@@ -78,7 +78,37 @@
 
     <profiles>
         <profile>
+            <id>default</id>
+            <activation>
+                <activeByDefault>true</activeByDefault>
+            </activation>
+            <dependencies>
+                <dependency>
+                    <groupId>org.apache.logging.log4j</groupId>
+                    <artifactId>log4j-slf4j2-impl</artifactId>
+                    <version>2.25.3</version>
+                </dependency>
+                <dependency>
+                    <groupId>org.apache.logging.log4j</groupId>
+                    <artifactId>log4j-api</artifactId>
+                    <version>2.25.3</version>
+                </dependency>
+                <dependency>
+                    <groupId>org.apache.logging.log4j</groupId>
+                    <artifactId>log4j-core</artifactId>
+                    <version>2.25.3</version>
+                </dependency>
+            </dependencies>
+        </profile>
+        <profile>
             <id>native</id>
+            <dependencies>
+                <dependency>
+                    <groupId>org.slf4j</groupId>
+                    <artifactId>slf4j-jdk14</artifactId>
+                    <version>1.5.6</version>
+                </dependency>
+            </dependencies>
             <build>
                 <plugins>
                     <plugin>
@@ -103,11 +133,15 @@
                             </execution>
                         </executions>
                         <configuration>
+<!--        -agentlib:native-image-agent=config-output-dir=                    -->
                             <buildArgs>
+                                <arg></arg>
 <!--                                <arg>-H:+UnlockExperimentalVMOption</arg>-->
                                 <arg>-H:+PrintClassInitialization</arg>
-                                <arg>--initialize-at-build-time=org.globsframework.core,com.google.gson,org.slf4j,org.globsframework.json,org.globsframework.http</arg>
+<!--                                <arg>&#45;&#45;exact-reachability-metadata</arg>-->
+<!--                                <arg>&#45;&#45;initialize-at-build-time=org.globsframework,com.google.gson.Gson,org.slf4j.helpers.NOPLogger</arg>-->
                             </buildArgs>
+                            <resourceBundles>src/resources/log4j2.xml</resourceBundles>
                             <mainClass>org.globsframework.sample.generic.GenericApiExpose</mainClass>
 <!--                            <mainClass>org.globsframework.sample.graphql.Example2</mainClass>-->
 <!--                            <agentResourceDirectory>../../graalvm/</agentResourceDirectory>-->
@@ -123,22 +157,22 @@
         <dependency>
             <groupId>org.globsframework</groupId>
             <artifactId>globs</artifactId>
-            <version>5.0-SNAPSHOT</version>
+            <version>5.13-SNAPSHOT</version>
         </dependency>
         <dependency>
             <groupId>org.globsframework</groupId>
             <artifactId>globs-commandline</artifactId>
-            <version>5.0-SNAPSHOT</version>
+            <version>5.1-SNAPSHOT</version>
         </dependency>
         <dependency>
             <groupId>org.globsframework</groupId>
             <artifactId>globs-http</artifactId>
-            <version>5.0-SNAPSHOT</version>
+            <version>5.1-SNAPSHOT</version>
         </dependency>
         <dependency>
             <groupId>org.globsframework</groupId>
             <artifactId>globs-sql</artifactId>
-            <version>5.0-SNAPSHOT</version>
+            <version>5.1-SNAPSHOT</version>
             <exclusions>
                 <exclusion>
                     <groupId>org.mariadb.jdbc</groupId>
@@ -157,7 +191,7 @@
         <dependency>
             <groupId>org.globsframework</groupId>
             <artifactId>globs-graphql</artifactId>
-            <version>5.0-SNAPSHOT</version>
+            <version>5.1-SNAPSHOT</version>
         </dependency>
 
 <!--        <dependency>-->
@@ -179,28 +213,13 @@
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
-            <version>2.0.5</version>
+            <version>2.0.17</version>
         </dependency>
 <!--        <dependency>-->
 <!--            <groupId>org.slf4j</groupId>-->
 <!--            <artifactId>slf4j-nop</artifactId>-->
 <!--            <version>2.0.16</version>-->
 <!--        </dependency>-->
-        <dependency>
-            <groupId>org.apache.logging.log4j</groupId>
-            <artifactId>log4j-slf4j2-impl</artifactId>
-            <version>2.20.0</version>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.logging.log4j</groupId>
-            <artifactId>log4j-api</artifactId>
-            <version>2.20.0</version>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.logging.log4j</groupId>
-            <artifactId>log4j-core</artifactId>
-            <version>2.20.0</version>
-        </dependency>
         <dependency>
             <groupId>io.dropwizard.metrics</groupId>
             <artifactId>metrics-core</artifactId>
